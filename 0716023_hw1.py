@@ -2,87 +2,103 @@
 
 from threading import Thread
 from threading import Lock
-from multiprocessing import Process
+from multiprocessing import Process, Value, Manager, Array
 from hashlib import sha256
 from time import time as currentTimeInSeconds
 import sys
 from random import randrange as rand
+from ctypes import c_wchar_p
+from queue import Empty, Queue
 
 
-def currentTimeInMicorseconds():
+def currentTimeInMicroseconds():
     return int(currentTimeInSeconds() * 1000000)
 
 
-class WorkloadA:
+R_ASCII = 0x7e
+L_ASCII = 0x21
 
-    L_ASCII = 0x21
-    R_ASCII = 0x7e
-    RND_RANGE = (R_ASCII - L_ASCII) ** 5
 
-    def getCandidate(self, index: int) -> str:
-        ret = ''
-        for i in range(5):
-            ret += chr(index % (self.R_ASCII - self.L_ASCII + 1) + self.L_ASCII)
-            index = index // (self.R_ASCII - self.L_ASCII + 1)
-        return ret
+def getCandidate(index: int):
+    ret = ''
+    for i in range(5):
+        ret += chr(index % (R_ASCII - L_ASCII + 1) + L_ASCII)
+        index = index // (R_ASCII - L_ASCII + 1)
+    return ret
 
-    def solveByThreads(self, suffix: str, threadCount: int):
-        self.flag = True
 
-        threadList = []
-        t0 = currentTimeInMicorseconds()
-        for i in range(threadCount):
-            t = Thread(target=self.task, args=(suffix, ))
-            t.daemon = True
-            threadList.append(t)
-            t.start()
-        for t in threadList:
-            t.join()
-        t1 = currentTimeInMicorseconds()
+def waSolveByThreads(suffices, threadCount: int):
+    n = len(suffices)
+    answer = [None] * n
+    taskQueue = Queue()
+    for i, v in enumerate(suffices):
+        taskQueue.put((i, v))
 
-        return self.answer + suffix, t1 - t0
+    # 0x21 ~ 0x7e
+    def worker():
+        while True:
+            try:
+                ansIdx, suffix = taskQueue.get_nowait()
+            except Empty:
+                break
+            i = 0
+            while True:
+                prefix = getCandidate(i)
+                tested = prefix + suffix
+                hashValue = sha256(tested.encode()).hexdigest()
+                if hashValue[:5] == '00000':
+                    answer[ansIdx] = tested
+                    break
+                i = i + 1
 
-    def solveByProcesses(self, suffix: str, processCount: int):
-        self.flag = True
+    threadList = []
+    t0 = currentTimeInMicroseconds()
+    for _ in range(threadCount):
+        t = Thread(target=worker)
+        t.daemon = True
+        threadList.append(t)
+        t.start()
+    for t in threadList:
+        t.join()
+    t1 = currentTimeInMicroseconds()
+    return answer, t1 - t0
 
-        processList = []
-        t0 = currentTimeInMicorseconds()
-        for i in range(processCount):
-            p = Process(target=self.task, args=(suffix, ))
-            p.daemon = True
-            processList.append(p)
-            p.start()
-        for p in processList:
-            p.join()
-        t1 = currentTimeInMicorseconds()
 
-        return self.answer + suffix, t1 - t0
+def waSolveByProcesses(suffices, processCount: int):
+    n = len(suffices)
+    answer = [None] * n
+    taskQueue = Queue()
+    for i, v in enumerate(suffices):
+        taskQueue.put((i, v))
 
-    def solveByCoroutine(self, suffix: str):
-        self.flag = True
+    # 0x21 ~ 0x7e
+    def worker():
+        while True:
+            try:
+                ansIdx, suffix = taskQueue.get_nowait()
+            except Empty:
+                break
+            i = 0
+            while True:
+                prefix = getCandidate(i)
+                tested = prefix + suffix
+                hashValue = sha256(tested.encode()).hexdigest()
+                if hashValue[:5] == '00000':
+                    answer[ansIdx] = tested
+                    break
+                i = i + 1
 
-        async def calc(prefix: str):
-            tested = prefix + suffix
-            hashValue = sha256(tested.encode()).hexdigest()
-            if hashValue[:5] == '00000':
-                self.answer = prefix
-                self.flag = False
+    processList = []
+    for _ in range(processCount):
+        p = Process(target=worker)
+        p.daemon = True
+        processList.append(p)
+        p.start()
+    for p in processList:
+        p.join()
 
-        t0 = currentTimeInMicorseconds()
-        while self.flag:
-            prefix = self.counter.next()
-            calc(prefix)
-        t1 = currentTimeInMicorseconds()
-        return self.answer + suffix, t1 - t0
+    return answer
 
-    def task(self, suffix: str):
-        while self.flag:
-            prefix = self.getCandidate(rand(self.RND_RANGE))
-            tested = prefix + suffix
-            hashValue = sha256(tested.encode()).hexdigest()
-            if hashValue[:5] == '00000':
-                self.answer = prefix
-                self.flag = False
 
 def main():
     dev = False
@@ -92,26 +108,20 @@ def main():
     workloadId = int(input())
     measurement = list(int(x) for x in input().split())
 
-
     if workloadId == 1:
-        workload = WorkloadA()
-    else:
-        print('TODO')
-        exit(-1)
-    
-    n = int(input())
-    for _ in range(n):
-        suffix = input()
+        n = int(input())
+        suffices = []
+        for _ in range(n):
+            suffices.append(input())
         if measurement[0] == 1:
-            result = workload.solveByThreads(suffix, measurement[1])
+            result = waSolveByThreads(suffices, measurement[1])
         elif measurement[0] == 2:
-            result = workload.solveByProcesses(suffix, measurement[1])
-        else:
-            result = workload.solveByCoroutine(suffix)
+            result = waSolveByProcesses(suffices, measurement[1])
+        for v in result[0]:
+            print(v)
         if dev:
-            print(result[0], result[1])
-        else:
-            print(result[0])
+            ms = (result[1]) // 1000
+            print('time:', ms, 'ms')
 
 
 if __name__ == '__main__':
