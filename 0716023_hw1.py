@@ -1,18 +1,17 @@
 #!/usr/bin/python3
 
-from threading import Thread
-from threading import Lock
+import sys
+from queue import Empty, Queue
+from threading import Thread, Lock
 import multiprocessing as mp
 from multiprocessing import Process
 from hashlib import sha256
 from time import time as currentTimeInSeconds
-import sys
-from random import randrange as rand
-from ctypes import c_wchar_p
-from queue import Empty, Queue
+import asyncio
 
-def currentTimeInMicroseconds():
-    return int(currentTimeInSeconds() * 1000000)
+
+def currentTimeInMilliseconds():
+    return int(currentTimeInSeconds() * 1000)
 
 
 R_ASCII = 0x7e
@@ -52,7 +51,7 @@ def waSolveByThreads(suffices, threadCount: int):
                 i = i + 1
 
     threadList = []
-    t0 = currentTimeInMicroseconds()
+    t0 = currentTimeInMilliseconds()
     for _ in range(threadCount):
         t = Thread(target=worker)
         t.daemon = True
@@ -60,8 +59,8 @@ def waSolveByThreads(suffices, threadCount: int):
         t.start()
     for t in threadList:
         t.join()
-    t1 = currentTimeInMicroseconds()
-    
+    t1 = currentTimeInMilliseconds()
+
     return result, t1 - t0
 
 
@@ -76,7 +75,7 @@ def waSolveByProcesses(suffices, processCount: int):
     def worker():
         while True:
             try:
-                ansIdx, suffix = taskQueue.get_nowait()
+                idx, suffix = taskQueue.get_nowait()
             except Empty:
                 break
             i = 0
@@ -85,12 +84,12 @@ def waSolveByProcesses(suffices, processCount: int):
                 tested = prefix + suffix
                 hashValue = sha256(tested.encode()).hexdigest()
                 if hashValue[:5] == '00000':
-                    resultQueue.put((ansIdx, prefix + suffix))
+                    resultQueue.put((idx, tested))
                     break
                 i = i + 1
 
     processList = []
-    t0 = currentTimeInMicroseconds()
+    t0 = currentTimeInMilliseconds()
     for _ in range(processCount):
         p = Process(target=worker)
         p.daemon = True
@@ -98,18 +97,36 @@ def waSolveByProcesses(suffices, processCount: int):
         p.start()
     for p in processList:
         p.join()
-    t1 = currentTimeInMicroseconds()
-    
+    t1 = currentTimeInMilliseconds()
+
     result = [None] * n
     while not resultQueue.empty():
         idx, val = resultQueue.get()
         result[idx] = val
     return result, t1 - t0
 
+async def waSolveByCoroutine(suffices):
+    n = len(suffices)
+    
+    async def worker(suffix: str):
+        i = 0
+        while True:
+            prefix = getCandidate(i)
+            tested = prefix + suffix
+            hashValue = sha256(tested.encode()).hexdigest()
+            if hashValue[:5] == '00000':
+                return tested
+            i = i + 1
+    
+    t0 = currentTimeInMilliseconds()
+    result = await asyncio.gather(*(list(worker(v) for v in suffices)))
+    t1 = currentTimeInMilliseconds()
+    return result, t1 - t0
+
 
 def main():
     dev = False
-    if len(sys.argv) == 2 and sys.argv[1] == '--dev':
+    if '--dev' in sys.argv:
         dev = True
 
     workloadId = int(input())
@@ -124,11 +141,12 @@ def main():
             result = waSolveByThreads(suffices, measurement[1])
         elif measurement[0] == 2:
             result = waSolveByProcesses(suffices, measurement[1])
+        elif measurement[0] == 3:
+            result = asyncio.run(waSolveByCoroutine(suffices))
         for v in result[0]:
             print(v)
-        if dev:
-            ms = (result[1]) // 1000
-            print('time:', ms, 'ms')
+        
+        print('time:', result[1], 'ms')
 
 
 if __name__ == '__main__':
