@@ -108,7 +108,10 @@ def main():
             result = workload.solveByProcesses(suffix, measurement[1])
         else:
             result = workload.solveByCoroutine(suffix)
-        print(result if dev else result[0])
+        if dev:
+            print(result[0], result[1])
+        else:
+            print(result[0])
 
 
 if __name__ == '__main__':
