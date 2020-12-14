@@ -2,13 +2,14 @@
 
 from threading import Thread
 from threading import Lock
-from multiprocessing import Process, Queue
+import multiprocessing as mp
+from multiprocessing import Process
 from hashlib import sha256
 from time import time as currentTimeInSeconds
 import sys
 from random import randrange as rand
 from ctypes import c_wchar_p
-from queue import Empty
+from queue import Empty, Queue
 
 def currentTimeInMicroseconds():
     return int(currentTimeInSeconds() * 1000000)
@@ -28,7 +29,7 @@ def getCandidate(index: int):
 
 def waSolveByThreads(suffices, threadCount: int):
     n = len(suffices)
-    answer = [None] * n
+    result = [None] * n
     taskQueue = Queue()
     for i, v in enumerate(suffices):
         taskQueue.put((i, v))
@@ -37,7 +38,7 @@ def waSolveByThreads(suffices, threadCount: int):
     def worker():
         while True:
             try:
-                ansIdx, suffix = taskQueue.get_nowait()
+                idx, suffix = taskQueue.get_nowait()
             except Empty:
                 break
             i = 0
@@ -46,7 +47,7 @@ def waSolveByThreads(suffices, threadCount: int):
                 tested = prefix + suffix
                 hashValue = sha256(tested.encode()).hexdigest()
                 if hashValue[:5] == '00000':
-                    answer[ansIdx] = tested
+                    result[idx] = tested
                     break
                 i = i + 1
 
@@ -60,13 +61,14 @@ def waSolveByThreads(suffices, threadCount: int):
     for t in threadList:
         t.join()
     t1 = currentTimeInMicroseconds()
-    return answer, t1 - t0
+    
+    return result, t1 - t0
 
 
 def waSolveByProcesses(suffices, processCount: int):
     n = len(suffices)
-    resultQueue = Queue()
-    taskQueue = Queue()
+    resultQueue = mp.Queue()
+    taskQueue = mp.Queue()
     for i, v in enumerate(suffices):
         taskQueue.put((i, v))
 
@@ -98,11 +100,11 @@ def waSolveByProcesses(suffices, processCount: int):
         p.join()
     t1 = currentTimeInMicroseconds()
     
-    result = []
+    result = [None] * n
     while not resultQueue.empty():
-        result.append(resultQueue.get())
-    result.sort(key=lambda a: a[0])
-    return list(v[1] for v in result), t1 - t0
+        idx, val = resultQueue.get()
+        result[idx] = val
+    return result, t1 - t0
 
 
 def main():
