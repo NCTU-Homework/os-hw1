@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import sys
 from queue import Empty, Queue
 from threading import Thread, Lock
