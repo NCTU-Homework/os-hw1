@@ -3,7 +3,7 @@ from threading import Thread, Lock
 import multiprocessing as mp
 from multiprocessing import Process
 from hashlib import sha256
-from time import time as currentTimeInSeconds, sleep
+from time import time as currentTimeInSeconds
 import asyncio
 from typing import List, Optional, Tuple
 from random import randrange, shuffle
@@ -11,10 +11,6 @@ from math import ceil
 import grequests
 import requests
 from lxml.html import fromstring
-
-
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
 
 
 def currentTimeInMilli():
@@ -52,6 +48,7 @@ def findPrefix(list: List[str]):
                 print(tested)
                 break
 
+
 async def findPrefixAsync(suffix: str):
     while True:
         p = getRandomPrefixCandidate()
@@ -61,6 +58,7 @@ async def findPrefixAsync(suffix: str):
             print(tested)
             break
 
+
 def findTitle(urls: List[str]):
     for url in urls:
         r = requests.get(url)
@@ -68,10 +66,12 @@ def findTitle(urls: List[str]):
         title = tree.findtext('.//title')
         print(title)
 
+
 def findTitleAsync(res, **kwargs):
     tree = fromstring(res.content)
     title = tree.findtext('.//title')
     print(title)
+
 
 def solveByThreads(m: int, data: List[str], threadCount: int):
     n = len(data)
@@ -83,7 +83,7 @@ def solveByThreads(m: int, data: List[str], threadCount: int):
         t = Thread(target=tar, args=(data[i * qn:i * qn + qn], ))
         t.daemon = True
         threadList.append(t)
-    
+
     t0 = currentTimeInMilli()
     for t in threadList:
         t.start()
@@ -104,7 +104,7 @@ def solveByProcesses(m: int, data: List[str], processCount: int):
         p = Process(target=tar, args=(data[i*qn:i*qn+qn], ))
         p.daemon = True
         processList.append(p)
-    
+
     t0 = currentTimeInMilli()
     for p in processList:
         p.start()
@@ -124,7 +124,8 @@ async def solveByCoroutine(m: int, data: List[str]):
     else:
         async_list = []
         for url in data:
-            action_item = grequests.get(url, hooks = {'response' : findTitleAsync})
+            action_item = grequests.get(
+                url, hooks={'response': findTitleAsync})
             async_list.append(action_item)
         grequests.map(async_list)
     t1 = currentTimeInMilli()
@@ -147,8 +148,7 @@ def main():
         t = solveByProcesses(workloadId, data, measurement[1])
     elif measurement[0] == 3:
         t = asyncio.run(solveByCoroutine(workloadId, data))
-    eprint(str(t))
-
+    print('Time: %d ms' % t)
 
 if __name__ == '__main__':
     main()
